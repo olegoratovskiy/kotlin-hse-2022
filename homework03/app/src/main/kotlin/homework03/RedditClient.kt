@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.soywiz.korio.async.async
 import com.soywiz.korio.net.http.Http
 import com.soywiz.korio.net.http.createHttpClient
 import kotlinx.coroutines.*
@@ -13,17 +14,21 @@ class RedditClient {
     private val client = createHttpClient()
     private val supervisor = CoroutineScope(SupervisorJob())
     private val mapper = jacksonObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    private val website = "https://www.reddit.com"
 
-    suspend fun getTopic(topicName: String): TopicSnapshot = coroutineScope {
+    private suspend fun getTopic(topicName: String): TopicSnapshot = coroutineScope {
         val urls = listOf(
-            "https://www.reddit.com/r/${topicName}/about.json",
-            "https://www.reddit.com/r/${topicName}.json"
+            "${website}/r/${topicName}/about.json",
+            "${website}/r/${topicName}.json"
         )
         val requests = urls.map { requestAsync(it).cover() }
         val (topicInfoResponse, topicDiscussionsResponse) = awaitAll(*requests.toTypedArray()).map {
             it ?: throw RedditParsingException()
         }
         val topicInfoTree = mapper.readTree(topicInfoResponse.readAllBytes()).path("data")
+        if (!topicInfoTree.has("title")) {
+            throw RedditParsingException("no such topic")
+        }
         val topicDiscussionsTree = mapper.readTree(topicDiscussionsResponse.readAllBytes())
             .path("data").path("children")
 
@@ -48,8 +53,8 @@ class RedditClient {
         TopicSnapshot(Date(), creationDate, subscribersOnline, description, topicDiscussions)
     }
 
-    suspend fun getComments(discussionId: String): CommentsSnapshot = coroutineScope {
-        val url = "https://www.reddit.com/comments/${discussionId}.json"
+    private suspend fun getComments(discussionId: String): CommentsSnapshot = coroutineScope {
+        val url = "${website}/comments/${discussionId}.json"
         val request = requestAsync(url).cover()
         val commentsResponse = request.await() ?: throw RedditParsingException()
         val commentsTree = (mapper.readTree(commentsResponse.readAllBytes()) as ArrayNode).get(1)
@@ -85,9 +90,6 @@ class RedditClient {
 
     suspend fun saveTopicInfo(topicName: String, path: String) = coroutineScope {
         val topicSnapshot = getTopic(topicName)
-        val commentsRequests =
-            topicSnapshot.discussions.map { supervisor.async { getComments(it.id).comments }.cover() }
-        val comments = awaitAll(*commentsRequests.toTypedArray()).flatMap { it ?: throw RedditParsingException() }
         launch(Dispatchers.IO) {
             writeCsvToFile(
                 path,
@@ -96,6 +98,9 @@ class RedditClient {
             )
             println("Wrote file ${topicName}-subjects.csv")
         }
+        val commentsRequests =
+            topicSnapshot.discussions.map { supervisor.async { getComments(it.id).comments }.cover() }
+        val comments = awaitAll(*commentsRequests.toTypedArray()).flatMap { it ?: throw RedditParsingException() }
         launch(Dispatchers.IO) {
             writeCsvToFile(
                 path,

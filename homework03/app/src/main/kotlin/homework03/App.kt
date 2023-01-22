@@ -8,7 +8,7 @@ import kotlinx.coroutines.runBlocking
 
 suspend fun main(args: Array<String>) = runBlocking {
     val redditClient = RedditClient()
-    val pathToSaveFiles = "/Users/olegoratovskiy/Desktop/"
+    val pathToSaveFiles = System.getProperty("user.dir")
     args.forEach {
         launch { redditClient.saveTopicInfo(it, pathToSaveFiles) }
     }
