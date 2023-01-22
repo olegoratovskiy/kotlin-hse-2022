@@ -16,8 +16,9 @@ interface Shape : DimensionAware, SizeAware
 class DefaultShape(private vararg val dims: Int) : Shape {
     override val ndim: Int
         get() = dims.size
-
-    override val size: Int = dims.reduce { acc, element -> acc * element }
+    override val size: Int by lazy {
+        dims.fold(1) {acc, element -> acc * element};
+    }
 
     override fun dim(i: Int): Int = dims[i]
 
@@ -34,8 +35,8 @@ class DefaultShape(private vararg val dims: Int) : Shape {
 }
 
 sealed class ShapeArgumentException(reason: String = "") : IllegalArgumentException(reason) {
-    class EmptyShapeException: ShapeArgumentException("shape can't be empty")
-    class NonPositiveDimensionException(index: Int, dim: Int): ShapeArgumentException(
+    class EmptyShapeException : ShapeArgumentException("shape can't be empty")
+    class NonPositiveDimensionException(index: Int, dim: Int) : ShapeArgumentException(
         "dimensions can't be non positive: dimension with index ${index + 1} is equals to $dim"
     )
 }

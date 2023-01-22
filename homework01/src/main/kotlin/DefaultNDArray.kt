@@ -223,11 +223,15 @@ class DefaultNDArray private constructor(private val shape: Shape, private val v
 
     private fun validatePoint(point: Point) {
         if (point.ndim != shape.ndim) {
-            throw NDArrayException.IllegalPointDimensionException();
+            throw NDArrayException.IllegalPointDimensionException("expected points to have same dim as shape");
         }
         for (index in 0 until point.ndim) {
-            if (point.dim(index) < 0 || point.dim(index) >= shape.dim(index)) {
-                throw NDArrayException.IllegalPointCoordinateException()
+            if (point.dim(index) < 0) {
+                throw NDArrayException.IllegalPointCoordinateException("expected points to have non negative values")
+            }
+            if (point.dim(index) >= shape.dim(index)) {
+                val message = "expected points to have values smaller than shape"
+                throw NDArrayException.IllegalPointCoordinateException(message)
             }
         }
     }
